@@ -13,11 +13,11 @@ library(ithir)
 # Step 1: Setup parameters and create output directory
 #---------------------------------------------------------------------------
 # Define the soil features to process
-soil_features <- c("clay", "phaq", "sand", "silt", "orgc")
+soil_features <- c("clay", "elcosp", "phaq", "sand", "silt", "tceq")
 
 # Define input and output paths
-input_file <- "D:/tierra/datasets/Mexico_wosis_cleaned_orgc.csv"
-output_dir <- "D:/tierra/outputs/harmonized/orgc"
+input_file <- "D:/tierra/outputs/unfiltered/wosis_202312_tceq_soil_features_cleaned.csv"
+output_dir <- "D:/tierra/outputs/unfiltered/harmonized/tceq"
 
 # Create output directory if it doesn't exist
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -47,24 +47,68 @@ process_soil_feature <- function(feature, input_data) {
   
   cat(paste0("Number of valid observations: ", nrow(soil_data), "\n"))
   
-  # Fit the equal-area spline
-  spline_result <- ea_spline(
-    obj = soil_data,
-    var = "value",
-    d = c(0, 5, 15, 30)
-  )
+  # Create a data frame to store harmonized data
+  all_harmonized <- data.frame()
   
-  # Get harmonized data at target depths
-  harmonized_data <- spline_result$harmonised
+  # Process each profile separately
+  profile_ids <- unique(soil_data$id)
+  cat(paste0("Processing ", length(profile_ids), " soil profiles\n"))
+  
+  for (pid in profile_ids) {
+    # Extract data for this profile
+    profile_data <- soil_data[soil_data$id == pid, ]
+    
+    # Skip profiles with less than 2 depth measurements
+    if (nrow(profile_data) < 2) {
+      cat(paste0("Profile ID ", pid, " has fewer than 2 depth measurements. Skipping.\n"))
+      next
+    }
+    
+    # Remove duplicate depths by averaging values
+    profile_data <- aggregate(value ~ id + top + bottom, data = profile_data, mean)
+    
+    # Add small noise to duplicated depths (if any remain after aggregation)
+    depth_counts <- table(profile_data$top)
+    duplicate_depths <- as.numeric(names(depth_counts[depth_counts > 1]))
+    
+    if (length(duplicate_depths) > 0) {
+      for (d in duplicate_depths) {
+        idx <- which(profile_data$top == d)
+        if (length(idx) > 1) {
+          profile_data$top[idx[-1]] <- profile_data$top[idx[-1]] + seq(0.001, 0.009, length.out = length(idx) - 1)
+        }
+      }
+    }
+    
+    # Try to fit the spline for this profile
+    tryCatch({
+      spline_result <- ea_spline(
+        obj = profile_data,
+        var = "value",
+        d = c(0, 5, 15, 30)
+      )
+      
+      # Add to the combined results
+      all_harmonized <- rbind(all_harmonized, spline_result$harmonised)
+    }, error = function(e) {
+      cat(paste0("Error processing profile ID ", pid, ": ", e$message, "\n"))
+    })
+  }
+  
+  # Skip if no profiles were successfully processed
+  if(nrow(all_harmonized) == 0) {
+    cat(paste0("No profiles could be successfully processed for feature: ", feature, ". Skipping.\n"))
+    return(NULL)
+  }
   
   # Create output file path
   output_file <- file.path(output_dir, paste0(feature, "_harmonized.csv"))
   
   # Save harmonized data to CSV
-  write.csv(harmonized_data, output_file, row.names = FALSE)
+  write.csv(all_harmonized, output_file, row.names = FALSE)
   cat(paste0("Saved harmonized data to: ", output_file, "\n"))
   
-  return(harmonized_data)
+  return(all_harmonized)
 }
 
 #---------------------------------------------------------------------------
