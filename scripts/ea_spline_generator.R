@@ -13,11 +13,11 @@ library(ithir)
 # Step 1: Setup parameters and create output directory
 #---------------------------------------------------------------------------
 # Define the soil features to process
-soil_features <- c("clay", "elcosp", "phaq", "sand", "silt", "tceq")
+soil_features <- c("clay", "elcosp", "phaq", "sand", "silt", "orgc")
 
 # Define input and output paths
-input_file <- "D:/tierra/outputs/unfiltered/wosis_202312_tceq_soil_features_cleaned.csv"
-output_dir <- "D:/tierra/outputs/unfiltered/harmonized/tceq"
+input_file <- "D:/tierra/outputs/unfiltered/mexico/wosis_202312_orgc_soil_features_cleaned.csv"
+output_dir <- "D:/tierra/outputs/unfiltered/harmonized/mexico/orgc"
 
 # Create output directory if it doesn't exist
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -59,10 +59,10 @@ process_soil_feature <- function(feature, input_data) {
     profile_data <- soil_data[soil_data$id == pid, ]
     
     # Skip profiles with less than 2 depth measurements
-    if (nrow(profile_data) < 2) {
-      cat(paste0("Profile ID ", pid, " has fewer than 2 depth measurements. Skipping.\n"))
-      next
-    }
+    # if (nrow(profile_data) < 2) {
+    #   cat(paste0("Profile ID ", pid, " has fewer than 2 depth measurements. Skipping.\n"))
+    #   next
+    # }
     
     # Remove duplicate depths by averaging values
     profile_data <- aggregate(value ~ id + top + bottom, data = profile_data, mean)
@@ -85,7 +85,7 @@ process_soil_feature <- function(feature, input_data) {
       spline_result <- ea_spline(
         obj = profile_data,
         var = "value",
-        d = c(0, 5, 15, 30)
+        d = c(0, 30)
       )
       
       # Add to the combined results
